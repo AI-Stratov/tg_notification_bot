@@ -68,10 +68,6 @@ class GroupChatBot:
                 f"Ошибка при отправке документа в чат {self.chat_id}: {e}"
             )
 
-    async def close(self):
-        await self.bot.session.close()
-        self.logger.info("Бот успешно завершил работу и закрыл все сессии.")
-
     async def _normalize_chat_id(self, chat_id: Union[int, str]) -> str:
         if isinstance(chat_id, int):
             return str(chat_id)
