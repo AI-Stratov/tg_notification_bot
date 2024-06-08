@@ -1,16 +1,23 @@
-from setuptools import setup, find_packages
+from setuptools import (
+    setup,
+    find_packages,
+)
+
+__version__: str = "0.0.1"
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
 
 setup(
-    name='tg_notification_bot',
-    version='0.1.0',
+    name="tg_notification_bot",
+    version=__version__,
+    description="Telegram notification bot for python projects",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     packages=find_packages(),
+    url="https://github.com/AI-Stratov/tg_notification_bot",
+    include_package_data=True,
     install_requires=[
-        'fastapi',
-        'uvicorn',
-        'python-telegram-bot'
+        "aiogram==2.4",
     ],
-    description='A library to integrate Telegram bot with FastAPI',
-    author='Your Name',
-    author_email='your.email@example.com',
-    url='https://github.com/yourusername/my_telegram_library',
 )
