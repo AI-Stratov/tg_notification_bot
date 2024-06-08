@@ -5,7 +5,7 @@ from aiogram import Bot, exceptions
 from aiogram.utils.exceptions import ChatNotFound, TelegramAPIError
 
 
-class GroupChatBot:
+class TgNotificationBot:
     def __init__(self, token: str, chat_id: Union[int, str]):
         self.bot = Bot(token=token)
         self.chat_id = chat_id

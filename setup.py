@@ -18,6 +18,6 @@ setup(
     url="https://github.com/AI-Stratov/tg_notification_bot",
     include_package_data=True,
     install_requires=[
-        "aiogram==2.4",
+        "aiogram==2.25.2",
     ],
 )

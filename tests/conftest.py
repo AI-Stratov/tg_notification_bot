@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from tg_notification_bot import GroupChatBot
+from tg_notification_bot import TgNotificationBot
 
 
 @pytest.fixture(scope="session")
@@ -13,5 +13,5 @@ def mock_bot():
         mock_bot_instance.send_photo = AsyncMock()
         mock_bot_instance.send_document = AsyncMock()
 
-        GroupChatBot(token="123456:ABCDEF1234ghIkl", chat_id="-123456789")
+        TgNotificationBot(token="123456:ABCDEF1234ghIkl", chat_id="-123456789")
         yield mock_bot_instance
