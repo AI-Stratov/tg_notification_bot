@@ -11,10 +11,12 @@ class TgNotificationBot:
         self.chat_id = chat_id
         self.logger = logging.getLogger(__name__)
 
-    async def send_message(self, message: str):
+    async def send_message(self, message: str, parse_mode: str = "HTML"):
         chat_id = await self._normalize_chat_id(self.chat_id)
         try:
-            await self.bot.send_message(chat_id=chat_id, text=message)
+            await self.bot.send_message(
+                chat_id=chat_id, text=message, parse_mode=parse_mode
+            )
         except exceptions.BotBlocked:
             self.logger.warning(
                 f"Бот заблокирован пользователем или не имеет доступа к чату с ID {self.chat_id}"

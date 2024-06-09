@@ -14,8 +14,7 @@ setup(
     description="Telegram notification bot for python projects",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(),
-    url="https://github.com/AI-Stratov/tg_notification_bot",
+    packages=find_packages(exclude=["tests", "docs"]),
     include_package_data=True,
     install_requires=[
         "aiogram==2.25.2",
