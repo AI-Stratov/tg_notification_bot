@@ -147,7 +147,7 @@ await bot.send_message(f"Привет, @{user}!")
 from app import bot
 
 # Жирный текст
-await bot.send_message("**Важное сообщение**", parse_mode="MarkdownV2")
+await bot.send_message("*Важное сообщение*", parse_mode="MarkdownV2")
 
 # Курсив
 await bot.send_message("_Это текст курсивом_", parse_mode="MarkdownV2")
