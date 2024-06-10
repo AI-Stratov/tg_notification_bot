@@ -69,7 +69,7 @@ ID с "-" в начале или положительное число, а ка�
 Установите библиотеку с помощью pip:
 
 ```bash
-pip install --use-deprecated=legacy-resolver --index-url=https://pypi-server.cism-ms.ru/tg_notification_bot
+pip install --use-deprecated=legacy-resolver --index-url=https://pypi-server.cism-ms.ru/ tg_notification_bot
 ```
 
 ### Шаг 5:Базовый интерфейс и контракты
