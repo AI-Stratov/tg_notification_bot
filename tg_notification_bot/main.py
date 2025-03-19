@@ -1,8 +1,12 @@
 import logging
 from typing import Union
 
-from aiogram import Bot, exceptions
-from aiogram.utils.exceptions import ChatNotFound, TelegramAPIError
+from aiogram import Bot
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramRetryAfter,
+)
 
 
 class TgNotificationBot:
@@ -17,15 +21,18 @@ class TgNotificationBot:
             await self.bot.send_message(
                 chat_id=chat_id, text=message, parse_mode=parse_mode
             )
-        except exceptions.BotBlocked:
+        except TelegramForbiddenError:
             self.logger.warning(
                 f"Бот заблокирован пользователем или не имеет доступа к чату с ID {self.chat_id}"
             )
-        except exceptions.ChatNotFound:
-            self.logger.warning(f"Чат с ID {self.chat_id} не найден")
-        except exceptions.RetryAfter as e:
+        except TelegramBadRequest as e:
+            if "chat not found" in str(e).lower():
+                self.logger.warning(f"Чат с ID {self.chat_id} не найден")
+            else:
+                self.logger.error(f"Ошибка запроса Telegram: {e}")
+        except TelegramRetryAfter as e:
             self.logger.warning(
-                f"Превышено ограничение на отправку сообщений. Повторите через {e.timeout} секунд"
+                f"Превышено ограничение на отправку сообщений. Повторите через {e.retry_after} секунд"
             )
         except Exception as e:
             self.logger.error(
@@ -36,15 +43,18 @@ class TgNotificationBot:
         chat_id = await self._normalize_chat_id(self.chat_id)
         try:
             await self.bot.send_photo(chat_id=chat_id, photo=photo, caption=caption)
-        except exceptions.BotBlocked:
+        except TelegramForbiddenError:
             self.logger.warning(
                 f"Бот заблокирован пользователем или не имеет доступа к чату с ID {self.chat_id}"
             )
-        except exceptions.ChatNotFound:
-            self.logger.warning(f"Чат с ID {self.chat_id} не найден")
-        except exceptions.RetryAfter as e:
+        except TelegramBadRequest as e:
+            if "chat not found" in str(e).lower():
+                self.logger.warning(f"Чат с ID {self.chat_id} не найден")
+            else:
+                self.logger.error(f"Ошибка запроса Telegram: {e}")
+        except TelegramRetryAfter as e:
             self.logger.warning(
-                f"Превышено ограничение на отправку сообщений. Повторите через {e.timeout} секунд"
+                f"Превышено ограничение на отправку сообщений. Повторите через {e.retry_after} секунд"
             )
         except Exception as e:
             self.logger.error(f"Ошибка при отправке фото в чат {self.chat_id}: {e}")
@@ -55,15 +65,18 @@ class TgNotificationBot:
             await self.bot.send_document(
                 chat_id=chat_id, document=document, caption=caption
             )
-        except exceptions.BotBlocked:
+        except TelegramForbiddenError:
             self.logger.warning(
                 f"Бот заблокирован пользователем или не имеет доступа к чату с ID {self.chat_id}"
             )
-        except exceptions.ChatNotFound:
-            self.logger.warning(f"Чат с ID {self.chat_id} не найден")
-        except exceptions.RetryAfter as e:
+        except TelegramBadRequest as e:
+            if "chat not found" in str(e).lower():
+                self.logger.warning(f"Чат с ID {self.chat_id} не найден")
+            else:
+                self.logger.error(f"Ошибка запроса Telegram: {e}")
+        except TelegramRetryAfter as e:
             self.logger.warning(
-                f"Превышено ограничение на отправку сообщений. Повторите через {e.timeout} секунд"
+                f"Превышено ограничение на отправку сообщений. Повторите через {e.retry_after} секунд"
             )
         except Exception as e:
             self.logger.error(
@@ -78,18 +91,27 @@ class TgNotificationBot:
         try:
             await self.bot.get_chat(chat_id)
             return chat_id
-        except ChatNotFound:
-            try:
-                modified_chat_id = "-" + chat_id
-                await self.bot.get_chat(modified_chat_id)
-                return modified_chat_id
-            except ChatNotFound:
-                modified_chat_id = "-100" + chat_id
-                await self.bot.get_chat(modified_chat_id)
-                return modified_chat_id
-            except TelegramAPIError as e:
+        except TelegramBadRequest as e:
+            if "chat not found" in str(e).lower():
+                try:
+                    modified_chat_id = "-" + chat_id
+                    await self.bot.get_chat(modified_chat_id)
+                    return modified_chat_id
+                except TelegramBadRequest as e2:
+                    if "chat not found" in str(e2).lower():
+                        modified_chat_id = "-100" + chat_id
+                        try:
+                            await self.bot.get_chat(modified_chat_id)
+                            return modified_chat_id
+                        except Exception as e3:
+                            self.logger.error(f"Telegram API error: {e3}")
+                            return chat_id
+                    else:
+                        self.logger.error(f"Telegram API error: {e2}")
+                        return chat_id
+            else:
                 self.logger.error(f"Telegram API error: {e}")
                 return chat_id
-        except TelegramAPIError as e:
+        except Exception as e:
             self.logger.error(f"Telegram API error: {e}")
             return chat_id

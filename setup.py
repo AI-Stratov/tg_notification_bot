@@ -3,7 +3,7 @@ from setuptools import (
     find_packages,
 )
 
-__version__: str = "0.0.1"
+__version__: str = "0.0.2"
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -17,6 +17,6 @@ setup(
     packages=find_packages(exclude=["tests", "docs"]),
     include_package_data=True,
     install_requires=[
-        "aiogram==2.25.2",
+        "aiogram>=3.15.0",
     ],
 )
