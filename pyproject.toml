@@ -1,0 +1,110 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tg-notification-bot"
+version = "0.3.0"
+description = "Modern Telegram notification bot library for Python projects"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+  { name = "AI-Stratov", email = "workistratov@gmail.com" },
+]
+keywords = ["telegram", "bot", "notifications", "aiogram"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Chat",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "aiogram>=3.15.0,<4.0.0",
+  "pydantic>=2.0.0,<3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-mock>=3.10.0",
+  "ruff>=0.1.0",
+  "mypy>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/AI-Stratov/tg-notification-bot"
+Repository = "https://github.com/AI-Stratov/tg-notification-bot"
+Issues = "https://github.com/AI-Stratov/tg-notification-bot/issues"
+Documentation = "https://github.com/AI-Stratov/tg-notification-bot#readme"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tg_notification_bot*"]
+exclude = ["tests*", "docs*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = [
+  ".eggs",
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".tox",
+  ".venv",
+  "build",
+  "dist",
+]
+
+[tool.ruff.lint]
+select = [
+  "E", # pycodestyle errors
+  "W", # pycodestyle warnings
+]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+exclude = [
+  "venv",
+  ".venv",
+  "tests",
+]
+python_version = "3.9"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+no_implicit_optional = true
+pretty = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# Ignore specific aiogram exception constructor issues in tests
+[[tool.mypy.overrides]]
+module = "tests.test_notification_bot"
+disable_error_code = ["call-arg"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
