@@ -159,6 +159,7 @@ class TestTelegramNotificationBot:
         """Test handling of blocked bot error."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.side_effect = TelegramForbiddenError(
+            method="sendMessage",
             message="Forbidden: bot was blocked by the user"
         )
 
@@ -174,6 +175,7 @@ class TestTelegramNotificationBot:
         """Test handling of chat not found error."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.side_effect = TelegramBadRequest(
+            method="sendMessage",
             message="Bad Request: chat not found"
         )
 
@@ -189,6 +191,7 @@ class TestTelegramNotificationBot:
         """Test handling of rate limit error."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.side_effect = TelegramRetryAfter(
+            method="sendMessage",
             message="Too Many Requests: retry after 30",
             retry_after=30,
         )
@@ -283,7 +286,7 @@ class TestTelegramNotificationBot:
         """Test chat ID normalization trying different formats."""
         # First call (original) fails, second call (with -) succeeds
         mock_bot.get_chat.side_effect = [
-            TelegramBadRequest(message="chat not found"),
+            TelegramBadRequest(method="getChat", message="chat not found"),
             Mock(),  # Success with modified chat_id
         ]
 
@@ -295,7 +298,7 @@ class TestTelegramNotificationBot:
         self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
     ) -> None:
         """Test chat ID normalization when all formats fail."""
-        mock_bot.get_chat.side_effect = TelegramBadRequest(message="chat not found")
+        mock_bot.get_chat.side_effect = TelegramBadRequest(method="getChat", message="chat not found")
 
         with pytest.raises(ChatNotFoundError):
             await notification_bot._normalize_chat_id("invalid_chat_id")

@@ -64,6 +64,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+
 from tg_notification_bot import TelegramNotificationBot, NotificationConfig
 
 
@@ -210,7 +211,7 @@ from tg_notification_bot import TelegramNotificationBot
 
 # Load from environment
 bot = TelegramNotificationBot(
-  config=os.getenv("TG_BOT_TOKEN"),
+  token=os.getenv("TG_BOT_TOKEN"),
   chat_id=os.getenv("TG_CHAT_ID")
 )
 ```
@@ -258,7 +259,7 @@ Main bot class for sending notifications.
 
 **Constructor:**
 
-- `TelegramNotificationBot(config: NotificationConfig | str, chat_id: str | int = None)`
+- `TelegramNotificationBot(token: NotificationConfig | str, chat_id: str | int = None)`
 
 **Methods:**
 
@@ -266,68 +267,6 @@ Main bot class for sending notifications.
 - `send_photo(photo: str | Path | IO | PhotoData, caption: str = None, chat_id: str | int = None) -> None`
 - `send_document(document: str | Path | IO | DocumentData, caption: str = None, chat_id: str | int = None) -> None`
 - `close() -> None`
-
-#### Configuration Models
-
-- `NotificationConfig` - Bot configuration
-- `MessageData` - Message parameters
-- `PhotoData` - Photo parameters
-- `DocumentData` - Document parameters
-
-#### Exceptions
-
-- `TelegramNotificationError` - Base exception
-- `ChatNotFoundError` - Chat not found
-- `BotBlockedError` - Bot blocked by user
-- `RateLimitError` - Rate limit exceeded
-- `InvalidChatIdError` - Invalid chat ID format
-
-## 🛠️ Development
-
-### Setup Development Environment
-
-```bash
-# Clone the repository
-git clone https://github.com/AI-Stratov/tg-notification-bot.git
-cd tg-notification-bot
-
-# Install the project and development dependencies
-uv sync --dev
-
-# Install pre-commit hooks
-uv run pre-commit install
-```
-
-### Building and Publishing
-
-```bash
-# Build the package
-uv build
-
-# Publish to PyPI (requires authentication)
-uv publish
-```
-
-### Code Style
-
-This project uses:
-
-- **ruff** for linting and code formatting (replaces black, isort, flake8)
-- **mypy** for type checking
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to
-discuss what you would like to change.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for your changes
-5. Ensure all tests pass (`pytest`)
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
 
 ## 📄 License
 
@@ -337,14 +276,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [aiogram](https://github.com/aiogram/aiogram) - Modern Telegram Bot API framework
 - [pydantic](https://github.com/pydantic/pydantic) - Data validation using Python type hints
-
-## 📊 Changelog
-
-### v0.1.0 (2024-XX-XX)
-
-- 🎉 Initial release
-- ✨ Full type safety with mypy support
-- 🚀 Modern aiogram 3.x and Pydantic 2.x
-- 🛡️ Comprehensive error handling
-- 📝 Complete test coverage
-- 📚 Full documentation

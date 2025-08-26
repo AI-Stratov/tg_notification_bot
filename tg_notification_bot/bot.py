@@ -26,25 +26,25 @@ class TelegramNotificationBot:
 
     def __init__(
         self,
-        config: Union[NotificationConfig, str],
+        token: Union[NotificationConfig, str],
         chat_id: Optional[Union[int, str]] = None,
     ):
         """
         Initialize the Telegram notification bot.
 
         Args:
-            config: NotificationConfig instance or bot token string
-            chat_id: Target chat ID (required if config is a string)
+            token: NotificationConfig instance or bot token string
+            chat_id: Target chat ID (required if token is a string)
 
         Raises:
             ValueError: If configuration is invalid
         """
-        if isinstance(config, str):
+        if isinstance(token, str):
             if chat_id is None:
-                raise ValueError("chat_id is required when config is a token string")
-            self.config = NotificationConfig(token=config, chat_id=chat_id)
+                raise ValueError("chat_id is required when token is a token string")
+            self.config = NotificationConfig(token=token, chat_id=chat_id)
         else:
-            self.config = config
+            self.config = token
 
         self.bot = Bot(token=self.config.token)
 
