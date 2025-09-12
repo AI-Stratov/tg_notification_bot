@@ -14,6 +14,8 @@ and Pydantic 2.x for maximum reliability and developer experience.
 - 📝 **Validation**: Input validation using Pydantic models
 - 🎯 **Multiple Formats**: Send text, photos, and documents
 - 🔧 **Flexible Configuration**: Support for various chat ID formats
+- 📡 **Multi-Chat Support**: Send messages to multiple chats simultaneously
+- 🚦 **Concurrent Control**: Configurable concurrency limits for bulk operations
 - 🧪 **Well Tested**: Comprehensive test suite with high coverage
 - 📦 **Zero Dependencies**: Only requires aiogram and pydantic
 
@@ -57,6 +59,110 @@ async def main():
 
 
 # Run the example
+asyncio.run(main())
+```
+
+### Multi-Chat Support
+
+#### Environment Variables for Multiple Chats
+
+```bash
+# .env file - Multiple chats separated by commas
+TG_BOT_TOKEN=your_bot_token_here
+TG_CHAT_ID=123456789,987654321,@channel_name
+
+# Alternative variable name
+TG_CHAT_IDS=123456789,987654321,@channel_name
+```
+
+```python
+import asyncio
+from tg_notification_bot import TelegramNotificationBot
+
+
+async def main():
+  # Automatically loads chat IDs from TG_CHAT_ID environment variable
+  bot = TelegramNotificationBot("YOUR_BOT_TOKEN")
+
+  # Send to all configured chats
+  result = await bot.send_message_bulk("Hello to all chats! 🌍")
+
+  print(f"Sent to {result.successful_chats}/{result.total_chats} chats")
+  print(f"Success rate: {result.success_rate:.1f}%")
+
+  if result.failed_chats > 0:
+    print(f"Failed chats: {result.failed_chat_ids}")
+
+  await bot.close()
+
+
+asyncio.run(main())
+```
+
+#### Programmatic Multi-Chat Configuration
+
+```python
+import asyncio
+from tg_notification_bot import TelegramNotificationBot, NotificationConfig
+
+
+async def main():
+  # Configure multiple chats programmatically
+  config = NotificationConfig(
+    token="YOUR_BOT_TOKEN",
+    chat_id=["123456789", "987654321", "@channel_name"],
+    parse_mode="Markdown",
+    disable_notification=True
+  )
+
+  bot = TelegramNotificationBot(config)
+
+  # Send to all configured chats
+  result = await bot.send_message_bulk("*Important* notification for all chats!")
+
+  # Detailed results
+  for send_result in result.results:
+    if send_result.success:
+      print(f"✅ Sent to {send_result.chat_id}")
+    else:
+      print(f"❌ Failed to send to {send_result.chat_id}: {send_result.error}")
+
+  await bot.close()
+
+
+asyncio.run(main())
+```
+
+#### Bulk Operations with Custom Chat Lists
+
+```python
+import asyncio
+from tg_notification_bot import TelegramNotificationBot
+
+
+async def main():
+  bot = TelegramNotificationBot("YOUR_BOT_TOKEN", "default_chat_id")
+
+  # Override chat list for specific operations
+  emergency_chats = ["admin_chat", "ops_chat", "@alerts_channel"]
+
+  async with bot:
+    # Send to specific chat list
+    result = await bot.send_message_bulk(
+      "🚨 System Alert: Server is down!",
+      chat_ids=emergency_chats,
+      fail_silently=False,  # Raise exceptions on failure
+      max_concurrent=5      # Limit concurrent sends
+    )
+
+    # Send photo to multiple chats
+    photo_result = await bot.send_photo_bulk(
+      "monitoring_dashboard.png",
+      caption="Current system status",
+      chat_ids=emergency_chats
+    )
+
+
 asyncio.run(main())
 ```
 
@@ -139,6 +245,36 @@ async def main():
 asyncio.run(main())
 ```
 
+### Handling Bulk Send Results
+
+```python
+import asyncio
+from tg_notification_bot import TelegramNotificationBot, BulkSendResult
+
+
+async def main():
+  async with TelegramNotificationBot("YOUR_BOT_TOKEN", ["chat1", "chat2", "chat3"]) as bot:
+    result: BulkSendResult = await bot.send_message_bulk("Test message")
+
+    # Check overall results
+    print(f"Success rate: {result.success_rate:.1f}%")
+    print(f"Successful chats: {len(result.successful_chat_ids)}")
+    print(f"Failed chats: {len(result.failed_chat_ids)}")
+
+    # Process individual results
+    for send_result in result.results:
+      if send_result.success:
+        print(f"✅ {send_result.chat_id}")
+      else:
+        print(f"❌ {send_result.chat_id}: {send_result.error}")
+        # Access original exception if needed
+        if send_result.exception:
+          print(f"   Exception type: {type(send_result.exception).__name__}")
+
+
+asyncio.run(main())
+```
+
 ### File Handling
 
 ```python
@@ -202,7 +338,15 @@ asyncio.run(main())
 ```bash
 # .env file
 TG_BOT_TOKEN=your_bot_token_here
+
+# Single chat
 TG_CHAT_ID=your_chat_id_here
+
+# Multiple chats (comma-separated)
+TG_CHAT_ID=123456789,987654321,@channel_name
+
+# Alternative for multiple chats
+TG_CHAT_IDS=123456789,987654321,@channel_name
 ```
 
 ```python
@@ -259,14 +403,45 @@ Main bot class for sending notifications.
 
 **Constructor:**
 
-- `TelegramNotificationBot(token: NotificationConfig | str, chat_id: str | int = None)`
+- `TelegramNotificationBot(token: NotificationConfig | str, chat_id: str | int | List[str | int] = None)`
 
 **Methods:**
 
+##### Single Chat Methods
 - `send_message(message: str | MessageData, chat_id: str | int = None) -> None`
 - `send_photo(photo: str | Path | IO | PhotoData, caption: str = None, chat_id: str | int = None) -> None`
 - `send_document(document: str | Path | IO | DocumentData, caption: str = None, chat_id: str | int = None) -> None`
+
+##### Bulk Methods
+- `send_message_bulk(message: str | MessageData, chat_ids: List[str | int] = None, fail_silently: bool = True, max_concurrent: int = 10) -> BulkSendResult`
+- `send_photo_bulk(photo: str | Path | IO | PhotoData, caption: str = None, chat_ids: List[str | int] = None, fail_silently: bool = True, max_concurrent: int = 10) -> BulkSendResult`
+- `send_document_bulk(document: str | Path | IO | DocumentData, caption: str = None, chat_ids: List[str | int] = None, fail_silently: bool = True, max_concurrent: int = 10) -> BulkSendResult`
+
+##### Utility Methods
 - `close() -> None`
+
+#### `BulkSendResult`
+
+Result object for bulk send operations.
+
+**Properties:**
+- `results: List[SendResult]` - Individual results for each chat
+- `total_chats: int` - Total number of chats attempted
+- `successful_chats: int` - Number of successful sends
+- `failed_chats: int` - Number of failed sends
+- `success_rate: float` - Success rate as percentage
+- `successful_chat_ids: List[str]` - List of successful chat IDs
+- `failed_chat_ids: List[str]` - List of failed chat IDs
+
+#### `SendResult`
+
+Result object for individual send operation.
+
+**Properties:**
+- `chat_id: str` - Chat ID where message was sent
+- `success: bool` - Whether the operation was successful
+- `error: Optional[str]` - Error message if failed
+- `exception: Optional[Exception]` - Original exception if failed
 
 ## 📄 License
 

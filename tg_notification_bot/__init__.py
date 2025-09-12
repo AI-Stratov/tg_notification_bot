@@ -5,7 +5,7 @@ This library provides a simple and efficient way to send notifications
 through Telegram bots with proper error handling and type safety.
 """
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from .bot import TelegramNotificationBot
 from .exceptions import (
@@ -15,7 +15,14 @@ from .exceptions import (
     RateLimitError,
     TelegramNotificationError,
 )
-from .models import DocumentData, MessageData, NotificationConfig, PhotoData
+from .models import (
+    DocumentData,
+    MessageData,
+    NotificationConfig,
+    PhotoData,
+    SendResult,
+    BulkSendResult,
+)
 
 __all__ = [
     "TelegramNotificationBot",
@@ -28,4 +35,6 @@ __all__ = [
     "MessageData",
     "PhotoData",
     "DocumentData",
+    "SendResult",
+    "BulkSendResult",
 ]
