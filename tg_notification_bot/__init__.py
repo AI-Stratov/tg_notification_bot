@@ -1,9 +1,4 @@
-"""
-Modern Telegram notification bot library for Python projects.
-
-This library provides a simple and efficient way to send notifications
-through Telegram bots with proper error handling and type safety.
-"""
+"""Send Telegram notifications to one or more chats."""
 
 __version__ = "1.0.0"
 
@@ -16,25 +11,25 @@ from .exceptions import (
     TelegramNotificationError,
 )
 from .models import (
+    BulkSendResult,
     DocumentData,
     MessageData,
     NotificationConfig,
     PhotoData,
     SendResult,
-    BulkSendResult,
 )
 
 __all__ = [
+    "BotBlockedError",
+    "BulkSendResult",
+    "ChatNotFoundError",
+    "DocumentData",
+    "InvalidChatIdError",
+    "MessageData",
+    "NotificationConfig",
+    "PhotoData",
+    "RateLimitError",
+    "SendResult",
     "TelegramNotificationBot",
     "TelegramNotificationError",
-    "ChatNotFoundError",
-    "BotBlockedError",
-    "RateLimitError",
-    "InvalidChatIdError",
-    "NotificationConfig",
-    "MessageData",
-    "PhotoData",
-    "DocumentData",
-    "SendResult",
-    "BulkSendResult",
 ]

@@ -1,12 +1,10 @@
 """Custom exceptions for Telegram notification bot."""
 
-from typing import Optional
-
 
 class TelegramNotificationError(Exception):
     """Base exception for Telegram notification errors."""
 
-    def __init__(self, message: str, chat_id: Optional[str] = None):
+    def __init__(self, message: str, chat_id: str | None = None):
         self.message = message
         self.chat_id = chat_id
         super().__init__(self.message)
@@ -31,7 +29,7 @@ class BotBlockedError(TelegramNotificationError):
 class RateLimitError(TelegramNotificationError):
     """Raised when rate limit is exceeded."""
 
-    def __init__(self, retry_after: int, chat_id: Optional[str] = None):
+    def __init__(self, retry_after: int, chat_id: str | None = None):
         self.retry_after = retry_after
         message = f"Rate limit exceeded. Retry after {retry_after} seconds"
         super().__init__(message, chat_id)

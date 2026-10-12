@@ -2,7 +2,7 @@
 
 import runpy
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -15,16 +15,18 @@ EXAMPLES_DIR = Path(__file__).resolve().parent.parent / "examples"
 @pytest.fixture
 def telegram_calls() -> Any:
     """Record Bot API calls instead of sending them."""
-    calls: List[TelegramMethod[Any]] = []
+    calls: list[TelegramMethod[Any]] = []
 
-    async def fake_make_request(self: AiohttpSession, bot: Any, method: TelegramMethod[Any], timeout: Any = None) -> None:
+    async def fake_make_request(
+        self: AiohttpSession, bot: Any, method: TelegramMethod[Any], timeout: Any = None
+    ) -> None:
         calls.append(method)
 
     with patch.object(AiohttpSession, "make_request", fake_make_request):
         yield calls
 
 
-async def test_multi_chat_example(telegram_calls: List[TelegramMethod[Any]], monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_multi_chat_example(telegram_calls: list[TelegramMethod[Any]], monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TG_BOT_TOKEN", "123456:ABC-DEF")
     monkeypatch.setenv("TG_CHAT_ID", "-1001234567890,@example_channel")
     module = runpy.run_path(str(EXAMPLES_DIR / "multi_chat_example.py"))

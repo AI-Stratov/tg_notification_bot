@@ -1,17 +1,20 @@
-"""Modern Telegram notification bot implementation."""
+"""Telegram notification bot."""
 
 import asyncio
 import os
+from collections.abc import Awaitable, Callable, Sequence
+from functools import partial
 from pathlib import Path
-from typing import IO, Any, List, Optional, Union
+from typing import IO, Any, TypeVar
 
 from aiogram import Bot
 from aiogram.exceptions import (
+    TelegramAPIError,
     TelegramBadRequest,
     TelegramForbiddenError,
     TelegramRetryAfter,
 )
-from aiogram.types import BufferedInputFile, FSInputFile, URLInputFile
+from aiogram.types import BufferedInputFile, FSInputFile, InputFile, URLInputFile
 
 from .exceptions import (
     BotBlockedError,
@@ -21,543 +24,294 @@ from .exceptions import (
     TelegramNotificationError,
 )
 from .models import (
+    BulkSendResult,
+    ChatId,
+    ChatIds,
     DocumentData,
     MessageData,
     NotificationConfig,
     PhotoData,
     SendResult,
-    BulkSendResult,
 )
+
+FileSource = str | Path | IO[bytes]
+T = TypeVar("T")
+_Sender = Callable[..., Awaitable[Any]]
+
+# Read in this order when the bot is created with a token string and no chat_id.
+_CHAT_ID_ENV_VARS = ("TG_CHAT_ID", "TG_CHAT_IDS")
+# Telegram clients often show group and supergroup IDs without these prefixes.
+_CHAT_ID_PREFIXES = ("", "-", "-100")
 
 
 class TelegramNotificationBot:
-    """Modern Telegram notification bot with type safety and proper error handling."""
+    """Send messages, photos and documents to one or more Telegram chats."""
 
-    def __init__(
-        self,
-        token: Union[NotificationConfig, str],
-        chat_id: Optional[Union[int, str, List[Union[int, str]]]] = None,
-    ):
+    def __init__(self, token: NotificationConfig | str, chat_id: ChatIds | None = None):
         """
         Initialize the Telegram notification bot.
 
         Args:
             token: NotificationConfig instance or bot token string
-            chat_id: Target chat ID(s) (required if token is a string)
+            chat_id: Target chat ID(s). If omitted with a token string, TG_CHAT_ID or TG_CHAT_IDS is used.
 
         Raises:
-            ValueError: If configuration is invalid
+            ValueError: If configuration is invalid or no chat ID is available
         """
-        if isinstance(token, str):
-            # Try to load chat_id from environment if not provided
-            if chat_id is None:
-                env_chat_id = self._load_chat_ids_from_env()
-                if env_chat_id is None:
-                    raise ValueError("chat_id is required when token is a token string and TG_CHAT_ID is not set")
-                # Type cast to satisfy mypy - env_chat_id is compatible with expected type
-                chat_id = env_chat_id  # type: ignore[assignment]
-            self.config = NotificationConfig(token=token, chat_id=chat_id)
-        else:
+        if isinstance(token, NotificationConfig):
             self.config = token
+        else:
+            chat_id = chat_id if chat_id is not None else _chat_ids_from_env()
+            if chat_id is None:
+                raise ValueError("chat_id is required when token is a token string and TG_CHAT_ID is not set")
+            self.config = NotificationConfig(token=token, chat_id=chat_id)
 
         self.bot = Bot(token=self.config.token)
+        self._resolved_chat_ids: dict[str, str] = {}
 
-    @staticmethod
-    def _load_chat_ids_from_env() -> Optional[Union[str, List[str]]]:
+    async def send_message(self, message: str | MessageData, chat_id: ChatIds | None = None) -> None:
         """
-        Load chat IDs from environment variables.
-
-        Supports:
-        - TG_CHAT_ID: Single chat ID or comma-separated list
-        - TG_CHAT_IDS: Comma-separated list of chat IDs
-
-        Returns:
-            Single chat ID, list of chat IDs, or None if not found
-        """
-        # Try TG_CHAT_ID first
-        chat_id_env = os.getenv("TG_CHAT_ID")
-        if chat_id_env:
-            chat_ids = [cid.strip() for cid in chat_id_env.split(",") if cid.strip()]
-            return chat_ids[0] if len(chat_ids) == 1 else chat_ids
-
-        # Try TG_CHAT_IDS as alternative
-        chat_ids_env = os.getenv("TG_CHAT_IDS")
-        if chat_ids_env:
-            chat_ids = [cid.strip() for cid in chat_ids_env.split(",") if cid.strip()]
-            return chat_ids[0] if len(chat_ids) == 1 else chat_ids
-
-        return None
-
-    def _get_target_chat_ids(self, chat_id: Optional[Union[int, str, List[Union[int, str]]]]) -> List[Union[int, str]]:
-        """
-        Get list of target chat IDs.
-
-        Args:
-            chat_id: Override chat ID(s) or None to use config
-
-        Returns:
-            List of chat IDs to send to
+        Send a text message to one chat.
 
         Raises:
-            ValueError: If no chat IDs are available
+            ChatNotFoundError, BotBlockedError, RateLimitError, TelegramNotificationError
         """
-        target = chat_id if chat_id is not None else self.config.chat_id
-
-        if target is None:
-            raise ValueError("No chat IDs specified")
-
-        if isinstance(target, list):
-            return target
-        else:
-            return [target]
-
-    async def send_message(
-        self,
-        message: Union[str, MessageData],
-        chat_id: Optional[Union[int, str, List[Union[int, str]]]] = None,
-    ) -> None:
-        """
-        Send a text message to single chat.
-
-        Args:
-            message: Message text or MessageData instance
-            chat_id: Override default chat ID
-
-        Raises:
-            ChatNotFoundError: If chat is not found
-            BotBlockedError: If bot is blocked
-            RateLimitError: If rate limit is exceeded
-            TelegramNotificationError: For other Telegram errors
-        """
-        chat_ids = self._get_target_chat_ids(chat_id)
-        if len(chat_ids) > 1:
-            raise ValueError("Use send_message_bulk for multiple chats")
-
-        target_chat_id = chat_ids[0]
-        normalized_chat_id = await self._normalize_chat_id(target_chat_id)
-
-        if isinstance(message, str):
-            message_data = MessageData(text=message)
-        else:
-            message_data = message
-
-        try:
-            await self.bot.send_message(
-                chat_id=normalized_chat_id,
-                text=message_data.text,
-                parse_mode=message_data.parse_mode or self.config.parse_mode,
-                disable_notification=message_data.disable_notification or self.config.disable_notification,
-                protect_content=message_data.protect_content or self.config.protect_content,
-            )
-        except TelegramForbiddenError:
-            raise BotBlockedError(str(target_chat_id))
-        except TelegramBadRequest as e:
-            if "chat not found" in str(e).lower():
-                raise ChatNotFoundError(str(target_chat_id))
-            raise TelegramNotificationError(f"Bad request: {e}", str(target_chat_id))
-        except TelegramRetryAfter as e:
-            raise RateLimitError(e.retry_after, str(target_chat_id))
-        except Exception as e:
-            raise TelegramNotificationError(f"Unexpected error: {e}", str(target_chat_id))
-
-    async def send_message_bulk(
-        self,
-        message: Union[str, MessageData],
-        chat_ids: Optional[List[Union[int, str]]] = None,
-        fail_silently: bool = True,
-        max_concurrent: int = 10,
-    ) -> BulkSendResult:
-        """
-        Send a text message to multiple chats.
-
-        Args:
-            message: Message text or MessageData instance
-            chat_ids: List of chat IDs (uses config chat_ids if None)
-            fail_silently: Continue sending to other chats if one fails
-            max_concurrent: Maximum number of concurrent sends
-
-        Returns:
-            BulkSendResult with details about each send attempt
-        """
-        target_chat_ids = chat_ids if chat_ids is not None else self._get_target_chat_ids(None)
-
-        if isinstance(message, str):
-            message_data = MessageData(text=message)
-        else:
-            message_data = message
-
-        # Create semaphore to limit concurrent operations
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def send_to_chat(chat_id: Union[int, str]) -> SendResult:
-            async with semaphore:
-                try:
-                    normalized_chat_id = await self._normalize_chat_id(chat_id)
-                    await self.bot.send_message(
-                        chat_id=normalized_chat_id,
-                        text=message_data.text,
-                        parse_mode=message_data.parse_mode or self.config.parse_mode,
-                        disable_notification=message_data.disable_notification or self.config.disable_notification,
-                        protect_content=message_data.protect_content or self.config.protect_content,
-                    )
-                    return SendResult(chat_id=str(chat_id), success=True, error=None, exception=None)
-                except Exception as e:
-                    error_msg = str(e)
-                    if not fail_silently:
-                        # Re-raise original exception for specific error types
-                        if isinstance(e, (BotBlockedError, ChatNotFoundError, RateLimitError)):
-                            raise
-                    return SendResult(chat_id=str(chat_id), success=False, error=error_msg, exception=e)
-
-        # Execute all sends concurrently
-        tasks = [send_to_chat(chat_id) for chat_id in target_chat_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
-
-        # Count successes and failures
-        successful = sum(1 for r in results if r.success)
-        failed = len(results) - successful
-
-        return BulkSendResult(
-            results=results,
-            total_chats=len(target_chat_ids),
-            successful_chats=successful,
-            failed_chats=failed,
-        )
+        data = message if isinstance(message, MessageData) else MessageData(text=message)
+        await self._send_one(self._message_sender(data), chat_id, bulk_method="send_message_bulk")
 
     async def send_photo(
         self,
-        photo: Union[str, Path, IO[bytes], PhotoData],
-        caption: Optional[str] = None,
-        chat_id: Optional[Union[int, str, List[Union[int, str]]]] = None,
+        photo: FileSource | PhotoData,
+        caption: str | None = None,
+        chat_id: ChatIds | None = None,
     ) -> None:
         """
-        Send a photo to single chat.
-
-        Args:
-            photo: Photo file path, URL, file-like object, or PhotoData instance
-            caption: Photo caption (ignored if photo is PhotoData)
-            chat_id: Override default chat ID
+        Send a photo to one chat. `caption` is ignored if `photo` is PhotoData.
 
         Raises:
-            ChatNotFoundError: If chat is not found
-            BotBlockedError: If bot is blocked
-            RateLimitError: If rate limit is exceeded
-            TelegramNotificationError: For other Telegram errors
+            ChatNotFoundError, BotBlockedError, RateLimitError, TelegramNotificationError
         """
-        chat_ids = self._get_target_chat_ids(chat_id)
-        if len(chat_ids) > 1:
-            raise ValueError("Use send_photo_bulk for multiple chats")
-
-        target_chat_id = chat_ids[0]
-        normalized_chat_id = await self._normalize_chat_id(target_chat_id)
-
-        if isinstance(photo, PhotoData):
-            photo_data = photo
-            photo_input = self._prepare_file_input(photo_data.photo)
-        else:
-            photo_data = PhotoData(photo=photo, caption=caption)
-            photo_input = self._prepare_file_input(photo)
-
-        try:
-            await self.bot.send_photo(
-                chat_id=normalized_chat_id,
-                photo=photo_input,
-                caption=photo_data.caption,
-                parse_mode=photo_data.parse_mode or self.config.parse_mode,
-                disable_notification=photo_data.disable_notification or self.config.disable_notification,
-                protect_content=photo_data.protect_content or self.config.protect_content,
-            )
-        except TelegramForbiddenError:
-            raise BotBlockedError(str(target_chat_id))
-        except TelegramBadRequest as e:
-            if "chat not found" in str(e).lower():
-                raise ChatNotFoundError(str(target_chat_id))
-            raise TelegramNotificationError(f"Bad request: {e}", str(target_chat_id))
-        except TelegramRetryAfter as e:
-            raise RateLimitError(e.retry_after, str(target_chat_id))
-        except Exception as e:
-            raise TelegramNotificationError(f"Unexpected error: {e}", str(target_chat_id))
-
-    async def send_photo_bulk(
-        self,
-        photo: Union[str, Path, IO[bytes], PhotoData],
-        caption: Optional[str] = None,
-        chat_ids: Optional[List[Union[int, str]]] = None,
-        fail_silently: bool = True,
-        max_concurrent: int = 10,
-    ) -> BulkSendResult:
-        """
-        Send a photo to multiple chats.
-
-        Args:
-            photo: Photo file path, URL, file-like object, or PhotoData instance
-            caption: Photo caption (ignored if photo is PhotoData)
-            chat_ids: List of chat IDs (uses config chat_ids if None)
-            fail_silently: Continue sending to other chats if one fails
-            max_concurrent: Maximum number of concurrent sends
-
-        Returns:
-            BulkSendResult with details about each send attempt
-        """
-        target_chat_ids = chat_ids if chat_ids is not None else self._get_target_chat_ids(None)
-
-        if isinstance(photo, PhotoData):
-            photo_data = photo
-        else:
-            photo_data = PhotoData(photo=photo, caption=caption)
-
-        # Prepare file input once for all chats
-        photo_input = self._prepare_file_input(photo_data.photo)
-
-        # Create semaphore to limit concurrent operations
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def send_to_chat(chat_id: Union[int, str]) -> SendResult:
-            async with semaphore:
-                try:
-                    normalized_chat_id = await self._normalize_chat_id(chat_id)
-                    await self.bot.send_photo(
-                        chat_id=normalized_chat_id,
-                        photo=photo_input,
-                        caption=photo_data.caption,
-                        parse_mode=photo_data.parse_mode or self.config.parse_mode,
-                        disable_notification=photo_data.disable_notification or self.config.disable_notification,
-                        protect_content=photo_data.protect_content or self.config.protect_content,
-                    )
-                    return SendResult(chat_id=str(chat_id), success=True, error=None, exception=None)
-                except Exception as e:
-                    error_msg = str(e)
-                    if not fail_silently:
-                        if isinstance(e, (BotBlockedError, ChatNotFoundError, RateLimitError)):
-                            raise
-                    return SendResult(chat_id=str(chat_id), success=False, error=error_msg, exception=e)
-
-        # Execute all sends concurrently
-        tasks = [send_to_chat(chat_id) for chat_id in target_chat_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
-
-        # Count successes and failures
-        successful = sum(1 for r in results if r.success)
-        failed = len(results) - successful
-
-        return BulkSendResult(
-            results=results,
-            total_chats=len(target_chat_ids),
-            successful_chats=successful,
-            failed_chats=failed,
-        )
+        data = photo if isinstance(photo, PhotoData) else PhotoData(photo=photo, caption=caption)
+        await self._send_one(self._photo_sender(data), chat_id, bulk_method="send_photo_bulk")
 
     async def send_document(
         self,
-        document: Union[str, Path, IO[bytes], DocumentData],
-        caption: Optional[str] = None,
-        chat_id: Optional[Union[int, str, List[Union[int, str]]]] = None,
+        document: FileSource | DocumentData,
+        caption: str | None = None,
+        chat_id: ChatIds | None = None,
     ) -> None:
         """
-        Send a document to single chat.
-
-        Args:
-            document: Document file path, URL, file-like object, or DocumentData
-            caption: Document caption (ignored if document is DocumentData)
-            chat_id: Override default chat ID
+        Send a document to one chat. `caption` is ignored if `document` is DocumentData.
 
         Raises:
-            ChatNotFoundError: If chat is not found
-            BotBlockedError: If bot is blocked
-            RateLimitError: If rate limit is exceeded
-            TelegramNotificationError: For other Telegram errors
+            ChatNotFoundError, BotBlockedError, RateLimitError, TelegramNotificationError
         """
-        chat_ids = self._get_target_chat_ids(chat_id)
-        if len(chat_ids) > 1:
-            raise ValueError("Use send_document_bulk for multiple chats")
+        data = document if isinstance(document, DocumentData) else DocumentData(document=document, caption=caption)
+        await self._send_one(self._document_sender(data), chat_id, bulk_method="send_document_bulk")
 
-        target_chat_id = chat_ids[0]
-        normalized_chat_id = await self._normalize_chat_id(target_chat_id)
-
-        if isinstance(document, DocumentData):
-            document_data = document
-            document_input = self._prepare_file_input(document_data.document)
-        else:
-            document_data = DocumentData(document=document, caption=caption)
-            document_input = self._prepare_file_input(document)
-
-        try:
-            await self.bot.send_document(
-                chat_id=normalized_chat_id,
-                document=document_input,
-                caption=document_data.caption,
-                parse_mode=document_data.parse_mode or self.config.parse_mode,
-                disable_notification=document_data.disable_notification or self.config.disable_notification,
-                protect_content=document_data.protect_content or self.config.protect_content,
-            )
-        except TelegramForbiddenError:
-            raise BotBlockedError(str(target_chat_id))
-        except TelegramBadRequest as e:
-            if "chat not found" in str(e).lower():
-                raise ChatNotFoundError(str(target_chat_id))
-            raise TelegramNotificationError(f"Bad request: {e}", str(target_chat_id))
-        except TelegramRetryAfter as e:
-            raise RateLimitError(e.retry_after, str(target_chat_id))
-        except Exception as e:
-            raise TelegramNotificationError(f"Unexpected error: {e}", str(target_chat_id))
-
-    async def send_document_bulk(
+    async def send_message_bulk(
         self,
-        document: Union[str, Path, IO[bytes], DocumentData],
-        caption: Optional[str] = None,
-        chat_ids: Optional[List[Union[int, str]]] = None,
+        message: str | MessageData,
+        chat_ids: Sequence[ChatId] | None = None,
         fail_silently: bool = True,
         max_concurrent: int = 10,
     ) -> BulkSendResult:
         """
-        Send a document to multiple chats.
+        Send a text message to several chats concurrently.
 
         Args:
-            document: Document file path, URL, file-like object, or DocumentData
-            caption: Document caption (ignored if document is DocumentData)
-            chat_ids: List of chat IDs (uses config chat_ids if None)
-            fail_silently: Continue sending to other chats if one fails
-            max_concurrent: Maximum number of concurrent sends
-
-        Returns:
-            BulkSendResult with details about each send attempt
+            message: Message text or MessageData instance
+            chat_ids: Target chats, the configured chats if None
+            fail_silently: Record failures in the result. If False, the first failure is raised
+                and the remaining sends are cancelled.
+            max_concurrent: Maximum number of sends in flight
         """
-        target_chat_ids = chat_ids if chat_ids is not None else self._get_target_chat_ids(None)
+        data = message if isinstance(message, MessageData) else MessageData(text=message)
+        return await self._send_many(self._message_sender(data), chat_ids, fail_silently, max_concurrent)
 
-        if isinstance(document, DocumentData):
-            document_data = document
-        else:
-            document_data = DocumentData(document=document, caption=caption)
+    async def send_photo_bulk(
+        self,
+        photo: FileSource | PhotoData,
+        caption: str | None = None,
+        chat_ids: Sequence[ChatId] | None = None,
+        fail_silently: bool = True,
+        max_concurrent: int = 10,
+    ) -> BulkSendResult:
+        """Send a photo to several chats concurrently. See send_message_bulk for the arguments."""
+        data = photo if isinstance(photo, PhotoData) else PhotoData(photo=photo, caption=caption)
+        return await self._send_many(self._photo_sender(data), chat_ids, fail_silently, max_concurrent)
 
-        # Prepare file input once for all chats
-        document_input = self._prepare_file_input(document_data.document)
-
-        # Create semaphore to limit concurrent operations
-        semaphore = asyncio.Semaphore(max_concurrent)
-
-        async def send_to_chat(chat_id: Union[int, str]) -> SendResult:
-            async with semaphore:
-                try:
-                    normalized_chat_id = await self._normalize_chat_id(chat_id)
-                    await self.bot.send_document(
-                        chat_id=normalized_chat_id,
-                        document=document_input,
-                        caption=document_data.caption,
-                        parse_mode=document_data.parse_mode or self.config.parse_mode,
-                        disable_notification=document_data.disable_notification or self.config.disable_notification,
-                        protect_content=document_data.protect_content or self.config.protect_content,
-                    )
-                    return SendResult(chat_id=str(chat_id), success=True, error=None, exception=None)
-                except Exception as e:
-                    error_msg = str(e)
-                    if not fail_silently:
-                        if isinstance(e, (BotBlockedError, ChatNotFoundError, RateLimitError)):
-                            raise
-                    return SendResult(chat_id=str(chat_id), success=False, error=error_msg, exception=e)
-
-        # Execute all sends concurrently
-        tasks = [send_to_chat(chat_id) for chat_id in target_chat_ids]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
-
-        # Count successes and failures
-        successful = sum(1 for r in results if r.success)
-        failed = len(results) - successful
-
-        return BulkSendResult(
-            results=results,
-            total_chats=len(target_chat_ids),
-            successful_chats=successful,
-            failed_chats=failed,
-        )
+    async def send_document_bulk(
+        self,
+        document: FileSource | DocumentData,
+        caption: str | None = None,
+        chat_ids: Sequence[ChatId] | None = None,
+        fail_silently: bool = True,
+        max_concurrent: int = 10,
+    ) -> BulkSendResult:
+        """Send a document to several chats concurrently. See send_message_bulk for the arguments."""
+        data = document if isinstance(document, DocumentData) else DocumentData(document=document, caption=caption)
+        return await self._send_many(self._document_sender(data), chat_ids, fail_silently, max_concurrent)
 
     async def close(self) -> None:
         """Close the bot session."""
         await self.bot.session.close()
 
     async def __aenter__(self) -> "TelegramNotificationBot":
-        """Async context manager entry."""
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Async context manager exit."""
         await self.close()
 
-    def _prepare_file_input(self, file_input: Union[str, Path, IO[bytes]]) -> Union[FSInputFile, URLInputFile, BufferedInputFile]:
+    def _message_sender(self, data: MessageData) -> _Sender:
+        return partial(self.bot.send_message, text=data.text, **self._options(data))
+
+    def _photo_sender(self, data: PhotoData) -> _Sender:
+        return partial(self.bot.send_photo, photo=_input_file(data.photo), caption=data.caption, **self._options(data))
+
+    def _document_sender(self, data: DocumentData) -> _Sender:
+        return partial(
+            self.bot.send_document, document=_input_file(data.document), caption=data.caption, **self._options(data)
+        )
+
+    def _options(self, data: MessageData | PhotoData | DocumentData) -> dict[str, Any]:
+        """Per-message options, falling back to the config for the ones left as None."""
+        return {
+            "parse_mode": _or_default(data.parse_mode, self.config.parse_mode),
+            "disable_notification": _or_default(data.disable_notification, self.config.disable_notification),
+            "protect_content": _or_default(data.protect_content, self.config.protect_content),
+        }
+
+    async def _send_one(self, sender: _Sender, chat_id: ChatIds | None, bulk_method: str) -> None:
+        targets = self._target_chat_ids(chat_id)
+        if len(targets) > 1:
+            raise ValueError(f"Use {bulk_method} for multiple chats")
+        await self._deliver(sender, targets[0])
+
+    async def _send_many(
+        self,
+        sender: _Sender,
+        chat_ids: Sequence[ChatId] | None,
+        fail_silently: bool,
+        max_concurrent: int,
+    ) -> BulkSendResult:
+        if max_concurrent < 1:
+            raise ValueError("max_concurrent must be at least 1")
+        targets = chat_ids if chat_ids is not None else self._target_chat_ids(None)
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def send_to(chat_id: ChatId) -> SendResult:
+            async with semaphore:
+                try:
+                    await self._deliver(sender, chat_id)
+                except TelegramNotificationError as e:
+                    if not fail_silently:
+                        raise
+                    return SendResult(chat_id=str(chat_id), success=False, error=str(e), exception=e)
+            return SendResult(chat_id=str(chat_id), success=True)
+
+        tasks = [asyncio.ensure_future(send_to(chat_id)) for chat_id in targets]
+        try:
+            results = await asyncio.gather(*tasks)
+        except BaseException:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
+        successful = sum(result.success for result in results)
+        return BulkSendResult(
+            results=results,
+            total_chats=len(results),
+            successful_chats=successful,
+            failed_chats=len(results) - successful,
+        )
+
+    async def _deliver(self, sender: _Sender, chat_id: ChatId) -> None:
+        """Send to one chat, translating aiogram errors into library exceptions."""
+        resolved = await self._resolve_chat_id(chat_id)
+        try:
+            await sender(chat_id=resolved)
+        except TelegramAPIError as e:
+            raise _translate_error(e, chat_id) from e
+
+    def _target_chat_ids(self, chat_id: ChatIds | None) -> list[ChatId]:
+        target = chat_id if chat_id is not None else self.config.chat_id
+        if target is None or target == []:
+            raise ValueError("No chat IDs specified")
+        return target if isinstance(target, list) else [target]
+
+    async def _resolve_chat_id(self, chat_id: ChatId) -> ChatId:
         """
-        Prepare file input for aiogram.
+        Return the chat ID to send to.
 
-        Args:
-            file_input: File path, URL, or file-like object
-
-        Returns:
-            Appropriate aiogram input file type
-        """
-        if hasattr(file_input, "read"):  # File-like object
-            data = file_input.read()
-            if hasattr(file_input, "name"):
-                filename = Path(file_input.name).name
-            else:
-                filename = "file"
-            return BufferedInputFile(data, filename=filename)
-
-        file_str = str(file_input)
-        if file_str.startswith(("http://", "https://")):
-            return URLInputFile(file_str)
-
-        file_path = Path(file_str)
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-        return FSInputFile(file_path)
-
-    async def _normalize_chat_id(self, chat_id: Union[int, str]) -> str:
-        """
-        Normalize and validate chat ID.
-
-        Args:
-            chat_id: Chat ID to normalize
-
-        Returns:
-            Normalized chat ID as string
-
-        Raises:
-            ChatNotFoundError: If chat is not found
-            InvalidChatIdError: If chat ID format is invalid
+        Integers and strings such as "@channel" or "-100123" are used as given. A string of digits
+        is looked up with getChat as is, then with the "-" and "-100" prefixes. The result is cached.
         """
         if isinstance(chat_id, int):
-            return str(chat_id)
+            return chat_id
+        text = chat_id.strip()
+        if not text:
+            raise InvalidChatIdError(chat_id)
+        if not text.isdigit():
+            return text
+        if text in self._resolved_chat_ids:
+            return self._resolved_chat_ids[text]
 
-        chat_id_str = str(chat_id).strip()
-        if not chat_id_str:
-            raise InvalidChatIdError("empty string")
-
-        # If already has proper group prefix, return as is
-        if chat_id_str.startswith("-100") or chat_id_str.startswith("-"):
+        for prefix in _CHAT_ID_PREFIXES:
+            candidate = prefix + text
             try:
-                await self.bot.get_chat(chat_id_str)
-                return chat_id_str
+                await self.bot.get_chat(candidate)
             except TelegramBadRequest:
-                raise ChatNotFoundError(chat_id_str)
+                continue
+            except TelegramAPIError as e:
+                raise _translate_error(e, chat_id) from e
+            self._resolved_chat_ids[text] = candidate
+            return candidate
+        raise ChatNotFoundError(text)
 
-        # Try original format first
-        try:
-            await self.bot.get_chat(chat_id_str)
-            return chat_id_str
-        except TelegramBadRequest:
-            pass
 
-        # Try with group prefix
-        try:
-            modified_chat_id = f"-{chat_id_str}"
-            await self.bot.get_chat(modified_chat_id)
-            return modified_chat_id
-        except TelegramBadRequest:
-            pass
+def _or_default(value: T | None, default: T) -> T:
+    return default if value is None else value
 
-        # Try with supergroup prefix
-        try:
-            modified_chat_id = f"-100{chat_id_str}"
-            await self.bot.get_chat(modified_chat_id)
-            return modified_chat_id
-        except TelegramBadRequest:
-            raise ChatNotFoundError(chat_id_str)
+
+def _chat_ids_from_env() -> ChatIds | None:
+    for name in _CHAT_ID_ENV_VARS:
+        chat_ids: list[ChatId] = [part.strip() for part in os.getenv(name, "").split(",") if part.strip()]
+        if chat_ids:
+            return chat_ids[0] if len(chat_ids) == 1 else chat_ids
+    return None
+
+
+def _input_file(source: Any) -> InputFile:
+    """Wrap a path, an http(s) URL or a binary file-like object for aiogram."""
+    if hasattr(source, "read"):
+        data = source.read()
+        if not isinstance(data, bytes):
+            raise TypeError("File-like objects must be opened in binary mode")
+        name = getattr(source, "name", None)
+        filename = Path(name).name if isinstance(name, str) and name else "file"
+        return BufferedInputFile(data, filename=filename)
+
+    if isinstance(source, str) and source.startswith(("http://", "https://")):
+        return URLInputFile(source)
+
+    if not isinstance(source, (str, Path)):
+        raise TypeError(f"Unsupported file source: {type(source).__name__}")
+    path = Path(source)
+    if not path.is_file():
+        raise FileNotFoundError(f"File not found: {path}")
+    return FSInputFile(path)
+
+
+def _translate_error(error: TelegramAPIError, chat_id: ChatId) -> TelegramNotificationError:
+    chat = str(chat_id)
+    if isinstance(error, TelegramForbiddenError):
+        return BotBlockedError(chat)
+    if isinstance(error, TelegramRetryAfter):
+        return RateLimitError(error.retry_after, chat)
+    if isinstance(error, TelegramBadRequest):
+        if "chat not found" in error.message.lower():
+            return ChatNotFoundError(chat)
+        return TelegramNotificationError(f"Bad request: {error}", chat)
+    return TelegramNotificationError(f"Telegram API error: {error}", chat)
