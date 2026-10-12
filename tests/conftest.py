@@ -1,9 +1,22 @@
 """Pytest configuration and fixtures for Telegram notification bot tests."""
 
 from collections.abc import Generator
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from aiogram.client.session.aiohttp import AiohttpSession
+
+
+@pytest.fixture(autouse=True)
+def block_telegram_api() -> Generator[None, None, None]:
+    """Fail any test that would send a real HTTP request to the Telegram API."""
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise RuntimeError("Unit tests must not call the Telegram API")
+
+    with patch.object(AiohttpSession, "make_request", refuse), patch.object(AiohttpSession, "stream_content", refuse):
+        yield
 
 
 @pytest.fixture
