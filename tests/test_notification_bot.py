@@ -110,9 +110,7 @@ class TestTelegramNotificationBot:
 
     def test_init_with_token_and_chat_id(self, mock_bot: AsyncMock) -> None:
         """Test initialization with token and chat_id."""
-        bot = TelegramNotificationBot(
-            "123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789"
-        )
+        bot = TelegramNotificationBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz", "123456789")
         assert bot.config.token == "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
         assert bot.config.chat_id == "123456789"
 
@@ -122,9 +120,7 @@ class TestTelegramNotificationBot:
             TelegramNotificationBot("123456789:ABCdefGHIjklMNOpqrsTUVwxyz")
 
     @pytest.mark.asyncio
-    async def test_send_message_success(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_message_success(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test successful message sending."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.return_value = Mock()
@@ -137,9 +133,7 @@ class TestTelegramNotificationBot:
         assert call_args[1]["parse_mode"] == "HTML"
 
     @pytest.mark.asyncio
-    async def test_send_message_with_message_data(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_message_with_message_data(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test sending message with MessageData object."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.return_value = Mock()
@@ -153,15 +147,10 @@ class TestTelegramNotificationBot:
         assert call_args[1]["parse_mode"] == "Markdown"
 
     @pytest.mark.asyncio
-    async def test_send_message_bot_blocked(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_message_bot_blocked(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test handling of blocked bot error."""
         mock_bot.get_chat.return_value = Mock()
-        mock_bot.send_message.side_effect = TelegramForbiddenError(
-            method="sendMessage",
-            message="Forbidden: bot was blocked by the user"
-        )
+        mock_bot.send_message.side_effect = TelegramForbiddenError(method="sendMessage", message="Forbidden: bot was blocked by the user")
 
         with pytest.raises(BotBlockedError) as exc_info:
             await notification_bot.send_message("Test message")
@@ -169,15 +158,10 @@ class TestTelegramNotificationBot:
         assert "123456789" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_send_message_chat_not_found(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_message_chat_not_found(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test handling of chat not found error."""
         mock_bot.get_chat.return_value = Mock()
-        mock_bot.send_message.side_effect = TelegramBadRequest(
-            method="sendMessage",
-            message="Bad Request: chat not found"
-        )
+        mock_bot.send_message.side_effect = TelegramBadRequest(method="sendMessage", message="Bad Request: chat not found")
 
         with pytest.raises(ChatNotFoundError) as exc_info:
             await notification_bot.send_message("Test message")
@@ -185,9 +169,7 @@ class TestTelegramNotificationBot:
         assert "123456789" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_send_message_rate_limit(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_message_rate_limit(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test handling of rate limit error."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_message.side_effect = TelegramRetryAfter(
@@ -202,9 +184,7 @@ class TestTelegramNotificationBot:
         assert exc_info.value.retry_after == 30
 
     @pytest.mark.asyncio
-    async def test_send_photo_with_path(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_photo_with_path(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test sending photo with file path."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_photo.return_value = Mock()
@@ -218,9 +198,7 @@ class TestTelegramNotificationBot:
         assert call_args[1]["caption"] == "Test caption"
 
     @pytest.mark.asyncio
-    async def test_send_photo_with_url(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_photo_with_url(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test sending photo with URL."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_photo.return_value = Mock()
@@ -230,9 +208,7 @@ class TestTelegramNotificationBot:
         mock_bot.send_photo.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_send_photo_with_file_object(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_photo_with_file_object(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test sending photo with file object."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_photo.return_value = Mock()
@@ -245,9 +221,7 @@ class TestTelegramNotificationBot:
         mock_bot.send_photo.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_send_document_success(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_send_document_success(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test successful document sending."""
         mock_bot.get_chat.return_value = Mock()
         mock_bot.send_document.return_value = Mock()
@@ -260,9 +234,7 @@ class TestTelegramNotificationBot:
         assert call_args[1]["caption"] == "Test document"
 
     @pytest.mark.asyncio
-    async def test_normalize_chat_id_integer(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_normalize_chat_id_integer(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test chat ID normalization with integer."""
         mock_bot.get_chat.return_value = Mock()
 
@@ -270,9 +242,7 @@ class TestTelegramNotificationBot:
         assert result == "123456789"
 
     @pytest.mark.asyncio
-    async def test_normalize_chat_id_with_prefix(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_normalize_chat_id_with_prefix(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test chat ID normalization with existing prefix."""
         mock_bot.get_chat.return_value = Mock()
 
@@ -280,9 +250,7 @@ class TestTelegramNotificationBot:
         assert result == "-100123456789"
 
     @pytest.mark.asyncio
-    async def test_normalize_chat_id_try_modifications(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_normalize_chat_id_try_modifications(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test chat ID normalization trying different formats."""
         # First call (original) fails, second call (with -) succeeds
         mock_bot.get_chat.side_effect = [
@@ -294,9 +262,7 @@ class TestTelegramNotificationBot:
         assert result == "-123456789"
 
     @pytest.mark.asyncio
-    async def test_normalize_chat_id_all_fail(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_normalize_chat_id_all_fail(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test chat ID normalization when all formats fail."""
         mock_bot.get_chat.side_effect = TelegramBadRequest(method="getChat", message="chat not found")
 
@@ -304,9 +270,7 @@ class TestTelegramNotificationBot:
             await notification_bot._normalize_chat_id("invalid_chat_id")
 
     @pytest.mark.asyncio
-    async def test_context_manager(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_context_manager(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test async context manager usage."""
         mock_bot.session = Mock()
         mock_bot.session.close = AsyncMock()
@@ -317,9 +281,7 @@ class TestTelegramNotificationBot:
         mock_bot.session.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_close(
-        self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock
-    ) -> None:
+    async def test_close(self, notification_bot: TelegramNotificationBot, mock_bot: AsyncMock) -> None:
         """Test manual close."""
         mock_bot.session = Mock()
         mock_bot.session.close = AsyncMock()
