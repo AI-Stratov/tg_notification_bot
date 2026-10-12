@@ -1,6 +1,6 @@
 # Usage
 
-This page describes the behavior of tg-notification-bot 1.0.0 in detail. The [README](../README.md) has the short version.
+This page describes the behavior of tg-notification-bot in detail. Changes between releases are listed in the [changelog](../CHANGELOG.md). The [README](../README.md) has the short version.
 
 - [Creating a bot](#creating-a-bot)
 - [Chat IDs](#chat-ids)
@@ -53,7 +53,7 @@ export TG_CHAT_ID="-1001234567890,@my_channel"
 bot = TelegramNotificationBot(token)  # chat IDs come from TG_CHAT_ID
 ```
 
-If neither variable is set, the constructor raises `ValueError`. The token is never read from the environment, and the variables are ignored when you pass a `NotificationConfig`.
+Empty entries are skipped. If neither variable has a value, the constructor raises `ValueError`. The token is never read from the environment, and the variables are ignored when you pass a `NotificationConfig`.
 
 ### Closing the session
 
@@ -66,13 +66,12 @@ async with TelegramNotificationBot(token, chat_id) as bot:
 
 ## Chat IDs
 
-Chat IDs can be integers or strings. They are handled differently:
+Chat IDs can be integers or strings:
 
-- **Integers** are sent as is. No extra requests.
-- **Strings starting with `-`** are checked with one `getChat` request. If Telegram answers with a bad request, `ChatNotFoundError` is raised.
-- **Other strings** (`"@my_channel"`, `"4274151810"`) are tried with `getChat` as given, then with a `-` prefix, then with a `-100` prefix. The first one that works is used. If none works, `ChatNotFoundError` is raised.
-
-So every send to a string ID costs one to three `getChat` requests. Use integer IDs when you know the full ID.
+- **Integers** are sent as is.
+- **Strings** are stripped of surrounding whitespace. `"@my_channel"`, `"-1001234567890"` and any other string that is not made of digits only are sent as is.
+- **Strings made of digits only** (`"4274151810"`) are looked up with `getChat`: first as given, then with a `-` prefix, then with a `-100` prefix. The first one that works is used and remembered for the lifetime of the bot object, so the lookup costs one to three requests once per chat. If none works, `ChatNotFoundError` is raised.
+- **Empty or blank strings** passed as a `chat_id` override raise `InvalidChatIdError`.
 
 The prefix search exists because Telegram clients often show IDs without the prefix. In Telegram Desktop, enable Settings > Advanced > Experimental settings > "Show Peer IDs in Profile". The chat profile then shows an ID such as `4 274 151 810`. Pass it as the string `"4274151810"` and the library finds the right prefix. Passed as an integer it would be sent as is and fail.
 
@@ -106,7 +105,7 @@ await bot.send_document(DocumentData(document="report.pdf", caption="Report", pr
 - `PhotoData.caption` and `DocumentData.caption` are limited to 1024 characters.
 - When you pass `PhotoData` or `DocumentData`, the `caption` argument of the method is ignored.
 - `parse_mode` falls back to the config. A message is always sent with a parse mode, so with the default HTML mode, text containing `<`, `>` or `&` must be escaped (for example with `html.escape`).
-- `disable_notification` and `protect_content` are combined with the config using `or`. A message can turn them on, but a `False` on the message does not override `True` in the config.
+- `parse_mode`, `disable_notification` and `protect_content` left as `None` fall back to the config. Any other value, including `False`, wins over the config.
 
 ## Sending to several chats
 
@@ -116,8 +115,8 @@ result = await bot.send_photo_bulk(photo, caption=None, chat_ids=None, fail_sile
 result = await bot.send_document_bulk(document, caption=None, chat_ids=None, fail_silently=True, max_concurrent=10)
 ```
 
-- `chat_ids` defaults to the configured chat(s). If neither is set, `ValueError` is raised.
-- Sends run concurrently, at most `max_concurrent` at a time. This limits parallel requests, not requests per second.
+- `chat_ids` is any sequence of chat IDs and defaults to the configured chat(s). If neither is set, `ValueError` is raised. An empty sequence returns an empty result.
+- Sends run concurrently, at most `max_concurrent` at a time. This limits parallel requests, not requests per second. `max_concurrent` must be at least 1.
 - A file is prepared once and reused for every chat.
 - A failure for one chat does not stop the others. It is recorded in the result.
 
@@ -132,9 +131,11 @@ result = await bot.send_document_bulk(document, caption=None, chat_ids=None, fai
 
 `SendResult` has `chat_id` (the ID you passed, as a string), `success`, `error` (the exception text) and `exception`.
 
-Unlike the single-chat methods, bulk methods do not translate Telegram errors. `SendResult.exception` holds the original aiogram exception, for example `TelegramForbiddenError` or `TelegramRetryAfter`. The exception is a `ChatNotFoundError` when string chat ID resolution failed.
+`SendResult.exception` holds the same library exception a single-chat method would raise (see [Errors](#errors)). The original aiogram exception is its `__cause__`.
 
-`fail_silently=False` re-raises only `ChatNotFoundError` from chat ID resolution. All other errors are still collected in the result. Sends to other chats that are already running are not cancelled.
+With `fail_silently=False`, the first failure is raised instead of collected, and the sends that have not finished yet are cancelled.
+
+Errors that do not come from Telegram, such as a bug in your code or a `TypeError` for an unsupported file, are never collected. They propagate and cancel the remaining sends.
 
 ## Files
 
@@ -142,27 +143,29 @@ Unlike the single-chat methods, bulk methods do not translate Telegram errors. `
 
 - a local path as `str` or `pathlib.Path`. A missing file raises `FileNotFoundError` before any request is made;
 - a `str` starting with `http://` or `https://`. aiogram downloads the file and uploads it to Telegram;
-- a file-like object with `read()`. It is read into memory once. The file name comes from its `name` attribute, or `"file"` if there is none.
+- a binary file-like object with `read()`. It is read into memory once. The file name comes from its `name` attribute, or `"file"` if there is none. A text-mode file raises `TypeError`.
 
-Telegram `file_id` strings are not supported: a string that is not a URL is treated as a path.
+A path that is a directory raises `FileNotFoundError`. Any other type raises `TypeError`. Telegram `file_id` strings are not supported: a string that is not a URL is treated as a path.
 
 ## Errors
 
-All library exceptions inherit from `TelegramNotificationError`, which has `message` and `chat_id` attributes.
+All library exceptions inherit from `TelegramNotificationError`, which has `message` and `chat_id` attributes. Errors returned by Telegram are translated as follows, both by the single-chat methods and in bulk results. The original aiogram exception is kept as `__cause__`.
 
-| Exception | When |
+| aiogram error | Library exception |
 |---|---|
-| `BotBlockedError` | Telegram returned 403 Forbidden (bot blocked by the user, removed from the chat, no rights) |
-| `ChatNotFoundError` | Telegram returned "chat not found", or a string chat ID could not be resolved |
-| `RateLimitError` | Telegram returned 429. `retry_after` holds the wait time in seconds |
-| `InvalidChatIdError` | A chat ID override is an empty or whitespace-only string |
-| `TelegramNotificationError` | Any other error during the send. The text starts with `Bad request:` or `Unexpected error:` |
+| `TelegramForbiddenError` (bot blocked by the user, removed from the chat, no rights) | `BotBlockedError` |
+| `TelegramBadRequest` with "chat not found" | `ChatNotFoundError` |
+| other `TelegramBadRequest` | `TelegramNotificationError`, text starts with `Bad request:` |
+| `TelegramRetryAfter` (HTTP 429) | `RateLimitError`, `retry_after` holds the wait time in seconds |
+| any other `TelegramAPIError`, including `TelegramNetworkError` | `TelegramNotificationError`, text starts with `Telegram API error:` |
 
-This mapping applies to the single-chat methods. Some errors are raised as they are:
+The same translation applies to the `getChat` lookups of digit-only chat IDs. `ChatNotFoundError` is also raised when that lookup finds nothing, and `InvalidChatIdError` for a blank chat ID.
 
-- `ValueError` for configuration problems, a missing chat ID, or several chats passed to a single-chat method. pydantic's `ValidationError` (a `ValueError` subclass) for invalid `NotificationConfig`, `MessageData`, `PhotoData` or `DocumentData`.
-- `FileNotFoundError` for a missing local file.
-- Errors other than "bad request" from the `getChat` lookup of a string chat ID, such as network errors.
+Other errors are raised as they are:
+
+- `ValueError` for configuration problems, a missing chat ID, several chats passed to a single-chat method, or `max_concurrent` below 1. pydantic's `ValidationError` (a `ValueError` subclass) for invalid `NotificationConfig`, `MessageData`, `PhotoData` or `DocumentData`.
+- `FileNotFoundError` for a missing local file, `TypeError` for an unsupported file source.
+- Anything that does not come from aiogram is not wrapped.
 
 The library does not retry. To retry on rate limits:
 
@@ -179,6 +182,8 @@ except RateLimitError as e:
 Everything below is importable from `tg_notification_bot`:
 
 - `TelegramNotificationBot`: `send_message`, `send_photo`, `send_document`, `send_message_bulk`, `send_photo_bulk`, `send_document_bulk`, `close`, async context manager. The `config` (`NotificationConfig`) and `bot` (`aiogram.Bot`) attributes are public.
+
+The package ships a `py.typed` marker, so type checkers use its annotations.
 - Models: `NotificationConfig`, `MessageData`, `PhotoData`, `DocumentData`, `SendResult`, `BulkSendResult`.
 - Exceptions: `TelegramNotificationError`, `ChatNotFoundError`, `BotBlockedError`, `RateLimitError`, `InvalidChatIdError`.
 
