@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tg-notification-bot"
 version = "1.0.0"
-description = "Modern Telegram notification bot library for Python projects with multi-chat support"
+description = "Async library for sending Telegram notifications to one or more chats, built on aiogram 3"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
@@ -40,10 +40,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/AI-Stratov/tg-notification-bot"
-Repository = "https://github.com/AI-Stratov/tg-notification-bot"
-Issues = "https://github.com/AI-Stratov/tg-notification-bot/issues"
-Documentation = "https://github.com/AI-Stratov/tg-notification-bot#readme"
+Homepage = "https://github.com/AI-Stratov/tg_notification_bot"
+Repository = "https://github.com/AI-Stratov/tg_notification_bot"
+Issues = "https://github.com/AI-Stratov/tg_notification_bot/issues"
+Documentation = "https://github.com/AI-Stratov/tg_notification_bot/blob/main/docs/usage.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
