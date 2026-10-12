@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 - 2026-10-12
 
 The public API (exported names, method signatures, model fields) is unchanged. Behavior changes:
 

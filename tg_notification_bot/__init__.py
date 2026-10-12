@@ -1,6 +1,6 @@
 """Send Telegram notifications to one or more chats."""
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from .bot import TelegramNotificationBot
 from .exceptions import (
