@@ -85,7 +85,9 @@ With pip 25.1 or newer, use `pip install -e . --group dev` and run the same comm
 
 Tests never call the Telegram API: `aiogram.Bot` is replaced with an autospec mock, and a fixture in `tests/conftest.py` fails any test that tries to send a real request. `pytest` fails below 100% branch coverage.
 
-CI runs lint, type checks and tests on every push and pull request. To release, update `__version__` in `tg_notification_bot/__init__.py` and [CHANGELOG.md](https://github.com/AI-Stratov/tg_notification_bot/blob/main/CHANGELOG.md), then push a tag `vX.Y.Z`. The publish workflow checks that the tag matches the version, runs CI and uploads to PyPI.
+CI runs lint, type checks and tests on every push and pull request. Dependabot proposes weekly updates for GitHub Actions, pre-commit hooks and `uv.lock`; the version ranges in `pyproject.toml` are changed by hand.
+
+To release, update `__version__` in `tg_notification_bot/__init__.py`, add a `## X.Y.Z` section to [CHANGELOG.md](https://github.com/AI-Stratov/tg_notification_bot/blob/main/CHANGELOG.md), then push a tag `vX.Y.Z`. The publish workflow checks that the tag matches the version and that the changelog has the section, runs CI, uploads to PyPI and creates a GitHub release with the changelog section and the built files.
 
 ## License
 

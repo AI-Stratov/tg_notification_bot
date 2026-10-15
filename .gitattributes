@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.png binary
+
+# Collapse the lockfile diff in pull requests.
+uv.lock linguist-generated=true

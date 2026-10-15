@@ -24,6 +24,8 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match __version__ ($version) in tg_notification_bot/__init__.py"
             exit 1
           fi
+      - name: Check that CHANGELOG.md has a section for the version
+        run: .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > /dev/null
       - run: uv build
       - run: uvx twine check --strict dist/*
       - uses: actions/upload-artifact@v7
@@ -45,3 +47,21 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Create the GitHub release with the CHANGELOG section and the built files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          .github/scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
